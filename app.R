@@ -8,7 +8,7 @@ library(glue)
 library(knitr)
 
 knit("model_explainer.Rmd", quiet = TRUE)
-knit("readme.Rmd", quiet = TRUE)
+knit("model_readme.Rmd", quiet = TRUE)
 
 ui <- fluidPage(
 
@@ -503,7 +503,7 @@ server <- function(input, output) {
         filename = "simulation.zip",
         content = function(file) {
             t <- tempdir()
-            file.copy("readme.html", glue("{t}/readme.html"))
+            file.copy("model_readme.html", glue("{t}/readme.html"))
             setwd(t)
             write.csv(rv$input_df, "settings.csv", row.names = FALSE)
             write.csv(rv$sim_data, "sim_data.csv", row.names = FALSE)
