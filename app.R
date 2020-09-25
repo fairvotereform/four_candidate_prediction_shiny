@@ -502,7 +502,7 @@ server <- function(input, output) {
         filename = "simulation.zip",
         content = function(file) {
             t <- tempdir()
-            file.copy("model_readme.html", glue("{t}/readme.html"))
+            file.copy("model_readme.html", glue("{t}/readme.html"), overwrite = TRUE)
             setwd(t)
             write.csv(rv$input_df, "settings.csv", row.names = FALSE)
             write.csv(rv$sim_data, "sim_data.csv", row.names = FALSE)

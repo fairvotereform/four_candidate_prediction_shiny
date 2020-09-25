@@ -6,6 +6,8 @@ output: html_document
 
 https://fairvote.shinyapps.io/final_round_poll_prediction_four_candidates/
 
+https://github.com/fairvotereform/four_candidate_prediction_shiny
+
 ---
 
 ###### draw
