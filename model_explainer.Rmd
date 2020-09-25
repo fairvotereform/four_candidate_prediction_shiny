@@ -1,0 +1,193 @@
+---
+output:
+  html_document:
+    css: style.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(janitor)
+library(DiagrammeR)
+```
+
+### Model Description
+
+We have poll data that can be summarized like this:
+
+```{r echo=FALSE}
+as_tibble(data.frame(first_choice = c("C", "C", "C", "D", "D", "D"),
+                     finalist_choice = c("A", "B", "Exhaust", "A", "B", "Exhaust"),
+                     first_choice_count = c(39, 39, 39, 91, 91, 91),
+                     finalist_choice_count = c(10, 25, 4, 50, 21, 20)))
+```
+In order to be able to use this data to make predictions about the final round count, we use it to fit a Bayesian model, and then we use the posterior distribution of model parameters to make the predictions we desire.
+
+This model is a multinomial-dirichlet model. Specifically, we assume the finalist choice responses are generated according to a multinomial distribution. 
+
+---
+
+$$
+finalist\_choice\_count_i \sim {\sf Multinomial}(first\_choice\_count_i,~ p_{A,i}, ~p_{B,i}, p_{exhaust, i})
+\\\\
+{\sf where~subscript}~i~{\sf indicates~the~row~in~the~table~above.}
+$$
+
+---
+
+
+So far there are only 3 parameters listed in the model, even though we know there are 6 (one set of transfer probabilities for each first choice candidate). The regression-y way of describing the 6 parameters in the model, treating first choice as an independent variable, looks like this:
+
+
+--- 
+
+
+$$
+\begin{aligned}
+p_{A,i} &= first\_choice_{C,i} * \alpha_C + (1 - first\_choice_{C,i})  * \alpha_D
+\\\\
+p_{B,i} &= first\_choice_{C,i} * \beta_C + (1 - first\_choice_{C,i})  * \beta_D
+\\\\
+p_{exhaust,i} &= first\_choice_{C,i} * \gamma_C + (1 - first\_choice_{C,i})  * \gamma_D
+\end{aligned}
+\\\\
+{\sf where } ~ first\_choice_{C,i} = 1 {\sf ~ if ~ the ~ voter ~ picked ~ C ~ first, ~ and ~ 0 ~ otherwise.}
+$$
+
+
+---
+
+
+In other words, one set of transfer probabilities generates the data when row $i$ in the first choice column is "C" ($\alpha_C, \beta_C, \gamma_C$) and another generates the data when the row contains "D" ($\alpha_D, \beta_D, \gamma_D$). A nicer way of writing this might be:
+
+
+---
+
+
+
+$$
+{\sf if~}first\_choice_i = {\sf C:}\\\\
+\begin{aligned}
+p_{A,i} &=  \alpha_C \\\\
+p_{B,i} &=  \beta_C \\\\
+p_{exhaust,i} &= \gamma_C \\\\
+\end{aligned}
+~\\\\~\\\\
+{\sf if~}first\_choice_i = {\sf D:}\\\\
+\begin{aligned}
+p_{A,i} &=  \alpha_D \\\\
+p_{B,i} &=  \beta_D \\\\
+p_{exhaust,i} &= \gamma_D
+\end{aligned}
+$$
+
+---
+
+
+So now there are 6 parameters. The remaining step, in order for this to be a Bayesian and generative model, is to place priors on the parameters that indicate what our beliefs are about the transfer probabilities prior to seeing any data. In this context, we also are aware of the additional constraint/correlation that exists among each set of parameters, in that the groups of parameters represent probabilities and must sum to 1. 
+
+The dirichlet distribution meets these needs. On each set of parameters ($\alpha_C, \beta_C, \gamma_C$ and $\alpha_D, \beta_D, \gamma_D$) we can place a ${\sf Dirichlet}(1,1,1)$ distribution. This prior places equal probability on all possible sets of transfer probabilities.
+
+
+---
+
+
+$$
+(\alpha_C, \beta_C, \gamma_C) \sim {\sf Dirichlet}(1,1,1)
+\\\\
+(\alpha_D, \beta_D, \gamma_D) \sim {\sf Dirichlet}(1,1,1)
+$$
+
+---
+
+
+With the model described, the posterior distribution can be estimated. In this context, with a flat prior, the posterior distribution tells us the relative probability that a set of parameters produced the poll data we observed. Conveniently, the Dirichlet is conjugate to the multinomial and so the posterior distribution that results from the combination of a multinomial likelihood and dirichlet prior has an analytical solution and is also dirichlet. This saves us from MCMC sampling. Random samples can now just be drawn using standard functions.
+
+More info about this step can be seen here:
+(https://en.wikipedia.org/wiki/Dirichlet_distribution#Conjugate_to_categorical/multinomial)
+
+The posterior distribution of transfer probabilities, now conditioned on the poll data, is:
+
+
+---
+
+
+$$
+(\alpha_C, \beta_C, \gamma_C) ~|~ {\sf poll} \sim {\sf Dirichlet}(n_{C\_to\_A} + 1, n_{C\_to\_B} + 1, n_{C\_to\_exhaust} + 1)
+\\\\
+(\alpha_D, \beta_D, \gamma_D) ~|~ {\sf poll}\sim {\sf Dirichlet}(n_{D\_to\_A} + 1, n_{D\_to\_B} + 1, n_{D\_to\_exhaust} + 1)
+$$
+
+---
+
+
+### Making predictions
+
+The posterior estimate can now be combined with any other information, such as election night first round totals, to make predictions for the final round, assuming both candidate C and D are eliminated in the RCV tally.
+
+To produce a distribution of predicted final round results for A and B:
+
+1. Draw one sample from the posterior distribution for C transfer probabilities and the posterior distribution for D transfer probabilities. 
+
+2. Plug each set of transfer probabilities, along with the respective candidates first round total, into the `rmultinom` function to simulate a redistribution of the candidates first round votes.
+
+3. Compute a simulated final round count for A by adding A's first round count + the simulated redistribution from C + the simulated redistribution from D. Do the same for B's final round count.
+
+4. Repeat steps to obtain a distribution of predicted final round results.
+
+From these predictions, we can also obtain predictions for final round percents and candidate win probabilities by applying additional transformations to the predictions in each posterior draw.
+      
+
+### Note on sample weights
+
+###### (This does not apply to the data simulated using this app)
+
+The sample poll data at the top of the page is not completely representative of the way our poll data looks in practice. Our poll comes with weighted responses and incorporating the weights adds an additional prep step before estimating the model. The issue is that the sum of the weights may end up as a total that is different than the number of samples. 
+
+I made up an example below:
+
+###### Counts
+```{r echo=FALSE}
+data.frame(first_choice = c("C", "C", "C", "D", "D", "D"),
+                     finalist_choice = c("A", "B", "Exhaust", "A", "B", "Exhaust"),
+                     first_choice_count = c(39, 39, 39, 91, 91, 91),
+                     finalist_choice_count = c(10, 25, 4, 50, 21, 20)
+) %>%
+  adorn_totals(,,,,finalist_choice_count) %>%
+  as_tibble()
+```
+
+###### Weighted
+```{r}
+data.frame(first_choice = c("C", "C", "C", "D", "D", "D"),
+            final_choice = c("A", "B", "Exhaust", "A", "B", "Exhaust"),
+            first_choice_weighted = c(43.9, 43.9, 43.9, 94.8, 94.8, 94.8),
+            finalist_choice_weighted = c(12.4, 24.5, 7, 53.9, 19.9, 21)
+) %>%
+  adorn_totals(,,,,finalist_choice_weighted) %>%
+    as_tibble()
+```
+
+The difference may be relatively small, as in my example, but it may also creep up to be larger. This matters because, while we want to keep the relative adjustments the weights make between responses, we do not want the model to see the weighted total and think there are more or less samples that are actually contained in the poll. This would lead a posterior distribution that contains more or less uncertainty than is warranted by the data. In practice, we can adjust the weights to make sure they sum to total number of responses (multiply the weights by the ratio of the number of responses to the sum of the weights). 
+
+###### Re-adjusted weights
+```{r echo=FALSE}
+
+data.frame(first_choice = c("C", "C", "C", "D", "D", "D"),
+            final_choice = c("A", "B", "Exhaust", "A", "B", "Exhaust"),
+            first_choice_count = c(39, 39, 39, 91, 91, 91),
+            finalist_choice_count = c(10, 25, 4, 50, 21, 20),
+            first_choice_weighted = c(43.9, 43.9, 43.9, 94.8, 94.8, 94.8),
+            finalist_choice_weighted = c(12.4, 24.5, 7, 53.9, 19.9, 21)
+) %>%
+  mutate(first_choice_adj = first_choice_weighted * (sum(finalist_choice_count)/sum(finalist_choice_weighted)),
+         finalist_choice_adj = finalist_choice_weighted * (sum(finalist_choice_count)/sum(finalist_choice_weighted))) %>%
+  select(-c(first_choice_count, finalist_choice_count, first_choice_weighted, finalist_choice_weighted)) %>%
+  adorn_totals(,,,,finalist_choice_adj) %>%
+  as_tibble()
+
+```
+

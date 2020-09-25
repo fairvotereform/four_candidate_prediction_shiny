@@ -1,0 +1,13 @@
+name: final_round_poll_prediction_four_candidates
+title: final_round_poll_prediction_four_candidates
+username:
+account: fairvote
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2855670
+bundleId: 3670992
+url: https://fairvote.shinyapps.io/final_round_poll_prediction_four_candidates/
+when: 1601053226.29961
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: model_explainer.html|model_explainer.md
