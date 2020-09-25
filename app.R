@@ -8,7 +8,6 @@ library(glue)
 library(knitr)
 
 knit("model_explainer.Rmd", quiet = TRUE)
-knit("model_readme.Rmd", quiet = TRUE)
 
 ui <- fluidPage(
 
